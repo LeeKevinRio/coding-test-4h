@@ -4,6 +4,21 @@
 
 Build a system that allows users to upload PDF documents, extract text, images, and tables, and engage in multimodal chat based on the extracted content.
 
+### Reference Materials
+
+This coding test is inspired by modern AI document processing capabilities. For background understanding of the underlying AI principles, you may reference these official technical documents:
+
+- **Anthropic Claude 3 Model Card**: https://www-cdn.anthropic.com/de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf
+- **Claude Opus 4 & Sonnet 4 System Card**: https://www-cdn.anthropic.com/4263b940cabb546aa0e3283f35b686f4f3b2ff47.pdf
+
+These documents provide insights into:
+- Multimodal AI capabilities (text + vision)
+- Document understanding and processing approaches
+- AI safety considerations in production systems
+- Constitutional AI principles for responsible AI development
+
+**Note**: The task below is an independent implementation challenge and does not require reproducing any content from these reference materials.
+
 ### Core Features
 1. **Document Processing**: PDF parsing using Docling (extract text, images, tables)
 2. **Vector Store**: Store extracted content in vector database
@@ -323,8 +338,8 @@ class Message:
 - **Framework**: FastAPI
 - **PDF Processing**: Docling
 - **Vector DB**: PostgreSQL + pgvector
-- **Embeddings**: HuggingFace Sentence Transformers (Free)
-- **LLM**: Ollama (Free, Local)
+- **Embeddings**: OpenAI API or HuggingFace
+- **LLM**: OpenAI GPT-4o-mini or Ollama
 - **Task Queue**: Celery + Redis (optional)
 
 ### Frontend
@@ -341,148 +356,13 @@ class Message:
 
 ---
 
-## LLM Setup (Ollama - Recommended)
-
-**This project uses Ollama as the default LLM provider - completely free and runs locally!**
-
-### Step-by-Step Ollama Setup
-
-#### 1. Install Ollama
-
-**For macOS:**
-```bash
-brew install ollama
-```
-
-**For Linux:**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-**For Windows:**
-- Download installer from [ollama.com/download](https://ollama.com/download)
-- Run the installer
-
-#### 2. Start Ollama Service
-
-```bash
-# Start Ollama (runs in background)
-ollama serve
-```
-
-#### 3. Download Recommended Model
-
-```bash
-# Download Llama 3.2 (3B - fast and efficient)
-ollama pull llama3.2
-
-# Verify installation
-ollama list
-```
-
-#### 4. Test Your Setup
-
-```bash
-# Quick test
-ollama run llama3.2 "Hello, tell me about AI"
-```
-
-#### 5. Environment Configuration
-
-Your `.env` file should already be configured for Ollama:
-
-```bash
-# LLM Configuration (Default: Ollama)
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
-
-# Optional: OpenAI (if you prefer to use paid API)
-# OPENAI_API_KEY=your-openai-api-key
-```
-
-### Model Options
-
-| Model | Size | RAM Required | Speed | Quality | Best For |
-|-------|------|--------------|--------|---------|----------|
-| `llama3.2` | 3B | 4GB+ | Fast | Good | **Development (Recommended)** |
-| `llama3.1` | 8B | 8GB+ | Medium | Very Good | Production |
-| `mistral` | 7B | 8GB+ | Medium | Good | Balanced |
-| `phi3` | 3.8B | 4GB+ | Fast | Good | Code tasks |
-
-### Troubleshooting Ollama
-
-**Problem**: `ollama: command not found`
-```bash
-# Check if Ollama is in PATH
-which ollama
-
-# If not installed, reinstall:
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-**Problem**: Model download fails
-```bash
-# Check internet connection and retry
-ollama pull llama3.2 --verbose
-```
-
-**Problem**: Out of memory
-```bash
-# Use smaller model
-ollama pull phi3
-
-# Update .env
-OLLAMA_MODEL=phi3
-```
-
-**Problem**: Can't connect to Ollama
-```bash
-# Make sure service is running
-ollama serve
-
-# Check if port 11434 is available
-curl http://localhost:11434/api/tags
-```
-
----
-
-## Alternative LLM Options (Optional)
-
-If you prefer cloud APIs or have issues with Ollama:
-
-### Option A: OpenAI (Paid)
-```bash
-# .env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your-openai-api-key
-```
-
-### Option B: Google Gemini (Free Tier)
-```bash
-# .env
-LLM_PROVIDER=gemini
-GOOGLE_API_KEY=your-gemini-api-key
-```
-
-### Option C: Groq (Free Tier)
-```bash
-# .env
-LLM_PROVIDER=groq
-GROQ_API_KEY=your-groq-api-key
-```
-
-**Default Recommendation**: Stick with **Ollama** - it's free, private, and has no rate limits!
-
----
-
 ## Getting Started
 
 ### Prerequisites
 - Docker & Docker Compose
 - Node.js 18+
 - Python 3.11+
-- Ollama (for LLM - see setup above)
+- OpenAI API Key (or Ollama for local LLM)
 
 ### Quick Start
 
@@ -491,17 +371,14 @@ GROQ_API_KEY=your-groq-api-key
 git clone <repository-url>
 cd coding-test-4th
 
-# 2. Install and setup Ollama (see LLM Setup section above)
-ollama pull llama3.2
-
-# 3. Set up environment
+# 2. Set up environment
 cp .env.example .env
-# .env is already configured for Ollama - no changes needed!
+# Edit .env and add your OPENAI_API_KEY
 
-# 4. Start all services
+# 3. Start all services
 docker-compose up -d
 
-# 5. Access the application
+# 4. Access the application
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:8000
 # API Docs: http://localhost:8000/docs
@@ -569,7 +446,7 @@ docker-compose up -d
 ### README Must Include
 - Project overview
 - Tech stack
-- Setup instructions (Docker + Ollama)
+- Setup instructions (Docker)
 - Environment variables (.env.example)
 - API testing examples
 - Features implemented
@@ -584,7 +461,7 @@ docker-compose up -d
 
 ### How to Submit
 1. Push code to GitHub
-2. Test that `docker-compose up` works with Ollama
+2. Test that `docker-compose up` works
 3. Send repository URL via email
 4. Include any special instructions
 
@@ -643,19 +520,19 @@ Each file contains detailed TODO comments with implementation hints and examples
 
 ## Troubleshooting
 
-### Ollama Issues
-**Problem**: Ollama model not responding
-**Solution**: 
-- Check if Ollama service is running: `ollama serve`
-- Verify model is downloaded: `ollama list`
-- Test with simple query: `ollama run llama3.2 "hello"`
-
 ### Document Processing Issues
 **Problem**: Docling can't extract tables
 **Solution**: 
 - Check PDF format (ensure it's not scanned image)
 - Add fallback parsing logic
 - Manually define table structure patterns
+
+### LLM API Costs
+**Problem**: OpenAI API is expensive
+**Solution**: Use free alternatives
+- Use caching for repeated queries
+- Use cheaper models (gpt-3.5-turbo)
+- Use local LLM (Ollama) for development
 
 ### Vector Search Issues
 **Problem**: Search results are not relevant
@@ -674,13 +551,110 @@ Each file contains detailed TODO comments with implementation hints and examples
 
 ---
 
-## FAQ
+## Free LLM Options
 
-**Q: Ollama won't start.**
-A: Try `ollama serve` in a separate terminal and check if port 11434 is available.
+You don't need to pay for OpenAI API! Here are free alternatives:
+
+### Option 1: Ollama (Recommended for Development)
+
+**Completely free, runs locally on your machine**
+
+1. **Install Ollama**
+```bash
+# Mac
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows
+# Download from https://ollama.com/download
+```
+
+2. **Download a model**
+```bash
+# Llama 3.2 (3B - fast, good for development)
+ollama pull llama3.2
+
+# Or Llama 3.1 (8B - better quality)
+ollama pull llama3.1
+
+# Or Mistral (7B - good balance)
+ollama pull mistral
+```
+
+3. **Update your .env**
+```bash
+# Use Ollama instead of OpenAI
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+```
+
+**Pros**: Free, private, no API limits, works offline
+**Cons**: Requires decent hardware (8GB+ RAM), slower than cloud APIs
+
+---
+
+### Option 2: Google Gemini (Free Tier)
+
+**Free tier: 60 requests per minute**
+
+1. **Get free API key**
+   - Go to https://makersuite.google.com/app/apikey
+   - Click "Create API Key"
+   - Copy your key
+
+2. **Update .env**
+```bash
+GOOGLE_API_KEY=your-gemini-api-key
+LLM_PROVIDER=gemini
+```
+
+**Pros**: Free, fast, good quality
+**Cons**: Rate limits, requires internet
+
+---
+
+### Option 3: Groq (Free Tier)
+
+**Free tier: Very fast inference, generous limits**
+
+1. **Get free API key**
+   - Go to https://console.groq.com
+   - Sign up and get API key
+
+2. **Update .env**
+```bash
+GROQ_API_KEY=your-groq-api-key
+LLM_PROVIDER=groq
+```
+
+**Pros**: Free, extremely fast, good quality
+**Cons**: Rate limits, requires internet
+
+---
+
+### Comparison Table
+
+| Provider | Cost | Speed | Quality | Setup |
+|----------|------|-------|---------|-------|
+| **Ollama** | Free | Medium | Good | Easy |
+| **Gemini** | Free | Fast | Very Good | Very Easy |
+| **Groq** | Free | Very Fast | Good | Very Easy |
+| OpenAI | Paid | Fast | Excellent | Very Easy |
+
+**Recommended**: Use **Ollama** for development (free, no limits)
+
+---
+
+## FAQ
 
 **Q: Docling won't install.**
 A: Try `pip install docling` or use the Docker image.
+
+**Q: I don't have an OpenAI API key.**
+A: You can install Ollama locally and use a free LLM (see Free LLM Options section).
 
 **Q: Where should I save images?**
 A: Save to `backend/uploads/images/` directory and store only the path in DB.
@@ -690,9 +664,6 @@ A: Render tables as images or display JSON data as HTML tables in frontend.
 
 **Q: How do I test the system locally?**
 A: Follow the Getting Started section and use the provided sample PDF (1706.03762v7.pdf).
-
-**Q: Can I use a different LLM?**
-A: Yes! The system supports OpenAI, Gemini, and Groq. See Alternative LLM Options section.
 
 ---
 
@@ -708,7 +679,7 @@ Good luck!
 
 1. **Start Simple**: Get core features working before adding advanced features
 2. **Test Early**: Test document processing with sample PDF immediately
-3. **Use Ollama**: Free, no API keys needed, perfect for development
+3. **Use Tools**: Leverage Docling, LangChain to save time
 4. **Focus on Core**: Perfect the RAG pipeline first
 5. **Document Well**: Clear README helps evaluators understand your work
 6. **Handle Errors**: Graceful error handling shows maturity
@@ -724,6 +695,6 @@ For questions about this coding challenge:
 
 ---
 
-**Version**: 1.1 (Updated for Ollama)  
-**Last Updated**: 2025-12-20  
+**Version**: 1.0  
+**Last Updated**: 2025-11-03  
 **Author**: InterOpera-Apps Hiring Team
