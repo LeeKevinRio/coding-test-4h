@@ -146,6 +146,45 @@ async def get_document(
     }
 
 
+@router.post("/{document_id}/process")
+async def process_document(
+    document_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually trigger document processing
+    """
+    document = db.query(Document).filter(Document.id == document_id).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if document.processing_status == "processing":
+        return {"message": "Document is already being processed", "status": document.processing_status}
+
+    if document.processing_status == "completed":
+        return {"message": "Document has already been processed", "status": document.processing_status}
+
+    # Update status to processing
+    document.processing_status = "processing"
+    db.commit()
+
+    try:
+        processor = DocumentProcessor(db)
+        result = await processor.process_document(document.file_path, document.id)
+
+        return {
+            "id": document.id,
+            "status": "completed",
+            "result": result
+        }
+    except Exception as e:
+        document.processing_status = "error"
+        document.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: int,

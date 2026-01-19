@@ -201,6 +201,49 @@ A: Yes, but we value your ability to explain *how* it works under the hood.
 
 ---
 
+## Screenshots & Demo Results
+
+The following screenshots demonstrate the system functionality using the "Attention Is All You Need" paper.
+
+### 1. Document List (Homepage)
+![Homepage](screenshots/01-homepage-document-list.png)
+- Shows uploaded document with processing status
+- Displays extracted statistics: 15 pages, 92 chunks, 10 tables
+
+### 2. Document Details
+![Document Details](screenshots/02-document-details.png)
+- Processing status and metadata
+- Access to extracted content
+
+### 3. Chat Interface
+![Chat Interface](screenshots/03-chat-interface-empty.png)
+- Clean interface for document Q&A
+
+### 4. Self-Attention Query
+![Self-Attention Query](screenshots/04-chat-self-attention.png)
+- **Question**: "What is Self-Attention and how does it work in the Transformer architecture?"
+- **Result**: Successfully retrieves relevant context from pages 2, 6, and 13
+- Shows source references with similarity scores
+
+### 5. BLEU Scores Query
+![BLEU Scores](screenshots/05-chat-bleu-scores.png)
+- **Question**: "What are the BLEU scores reported in the paper?"
+- **Result**: Retrieves Table 2 data showing model comparisons
+- Demonstrates table data retrieval capability
+
+### 6. Architecture Query
+![Architecture](screenshots/06-chat-architecture.png)
+- **Question**: "Can you describe the Transformer architecture shown in Figure 1?"
+- **Result**: Retrieves descriptions of encoder-decoder architecture
+- References Figure 1 from page 3
+
+### 7. Upload Page
+![Upload Page](screenshots/07-upload-page.png)
+- Drag-and-drop interface for PDF uploads
+- File size limit: 50MB
+
+---
+
 **Version**: 2.0 (Updated for AI Context Architect Role)
-**Last Updated**: 2026-01-12
+**Last Updated**: 2026-01-19
 **Author**: InterOpera-Apps Hiring Team
