@@ -1,36 +1,36 @@
 """
-Chat engine service for multimodal RAG.
+Multimodal Chat Engine with RAG Pipeline
 
-TODO: Implement this service to:
-1. Process user messages
-2. Search for relevant context using vector store
-3. Find related images and tables
-4. Generate responses using LLM
-5. Support multi-turn conversations
+Supports multiple LLM backends:
+- Groq Llama (free tier available) - RECOMMENDED
+- Google Gemini (free tier available)
+- OpenAI GPT (requires API key)
+- Ollama (local, completely free)
 """
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from app.models.conversation import Conversation, Message
+from app.models.document import DocumentImage, DocumentTable
 from app.services.vector_store import VectorStore
 from app.core.config import settings
 import time
 import json
+import os
 
 
 class ChatEngine:
-    """
-    Multimodal chat engine with RAG.
-    
-    This is a SKELETON implementation. You need to implement the core logic.
-    """
+    """Multimodal chat engine with RAG (Retrieval-Augmented Generation)."""
     
     def __init__(self, db: Session):
+        """Initialize chat engine with database session."""
         self.db = db
         self.vector_store = VectorStore(db)
-        self.llm = None  # TODO: Initialize LLM (OpenAI, Ollama, etc.)
+        self.llm_client = None
+        self.llm_provider = None
+        self.llm_model = None
+        
         self._initialize_llm()
         
-        # Prompt templates
         self.system_prompt = """You are a helpful AI assistant that answers questions based on document content.
 
 When answering questions:
@@ -39,11 +39,6 @@ When answering questions:
 3. If you cannot find the answer in the context, say so clearly
 4. Cite page numbers when referencing specific information
 5. Be concise but thorough
-
-Context will be provided in the following format:
-- Text chunks with page numbers
-- Related images with captions
-- Related tables with data
 
 Always ground your answers in the provided context."""
 
@@ -63,73 +58,75 @@ CONVERSATION HISTORY:
 
 USER QUESTION: {question}
 
-Please provide a helpful, accurate answer based on the context above. If the context doesn't contain enough information to fully answer the question, acknowledge what you can answer and what requires additional information."""
+Please provide a helpful, accurate answer based on the context above."""
     
     def _initialize_llm(self):
-        """
-        Initialize the LLM client.
+        """Initialize the LLM client with fallback chain."""
         
-        Supports:
-        - OpenAI GPT models
-        - Ollama (local, free)
-        - Groq (free tier)
-        - Google Gemini (free tier)
-        """
-        # Try OpenAI first
-        try:
-            import openai
-            if hasattr(settings, 'OPENAI_API_KEY') and settings.OPENAI_API_KEY:
-                self.llm_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-                self.llm_provider = "openai"
-                self.llm_model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
-                print(f"Using OpenAI {self.llm_model} for chat")
-                return
-        except ImportError:
-            pass
-        
-        # Try Groq (free tier available)
+        # Try Groq first (free tier, fast, recommended)
         try:
             from groq import Groq
-            import os
             groq_key = os.getenv("GROQ_API_KEY") or getattr(settings, 'GROQ_API_KEY', None)
-            if groq_key:
+            if groq_key and groq_key.strip():
                 self.llm_client = Groq(api_key=groq_key)
                 self.llm_provider = "groq"
-                self.llm_model = "llama-3.1-70b-versatile"
-                print(f"Using Groq {self.llm_model} for chat")
+                self.llm_model = "llama-3.3-70b-versatile"  # Updated model name
+                print(f"✓ Using Groq {self.llm_model} for chat")
                 return
         except ImportError:
-            pass
+            print("groq not installed")
+        except Exception as e:
+            print(f"Groq init error: {e}")
         
-        # Try Google Gemini (free tier available)
+        # Try Google Gemini
         try:
             import google.generativeai as genai
-            import os
             gemini_key = os.getenv("GOOGLE_API_KEY") or getattr(settings, 'GOOGLE_API_KEY', None)
-            if gemini_key:
+            if gemini_key and gemini_key.strip():
                 genai.configure(api_key=gemini_key)
-                self.llm_client = genai.GenerativeModel('gemini-1.5-flash')
+                model_name = 'gemini-2.0-flash'
+                self.llm_client = genai.GenerativeModel(model_name)
                 self.llm_provider = "gemini"
-                self.llm_model = "gemini-1.5-flash"
-                print(f"Using Google Gemini for chat")
+                self.llm_model = model_name
+                print(f"✓ Using Google Gemini ({model_name}) for chat")
                 return
         except ImportError:
-            pass
+            print("google-generativeai not installed")
+        except Exception as e:
+            print(f"Gemini init error: {e}")
+        
+        # Try OpenAI
+        try:
+            import openai
+            api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, 'OPENAI_API_KEY', None)
+            if api_key and api_key.strip() and not api_key.startswith('sk-your'):
+                self.llm_client = openai.OpenAI(api_key=api_key)
+                self.llm_provider = "openai"
+                self.llm_model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+                print(f"✓ Using OpenAI {self.llm_model} for chat")
+                return
+        except ImportError:
+            print("openai not installed")
+        except Exception as e:
+            print(f"OpenAI init error: {e}")
         
         # Try Ollama as fallback (local, free)
         try:
             import ollama
-            # Test if Ollama is running
-            ollama.chat(model='llama3.2', messages=[{'role': 'user', 'content': 'test'}])
-            self.llm_client = ollama
-            self.llm_provider = "ollama"
-            self.llm_model = "llama3.2"
-            print(f"Using Ollama {self.llm_model} for chat")
-            return
-        except:
-            pass
+            models = ollama.list()
+            if models and models.get('models'):
+                model_name = models['models'][0]['name'].split(':')[0]
+                self.llm_client = ollama
+                self.llm_provider = "ollama"
+                self.llm_model = model_name
+                print(f"✓ Using Ollama {self.llm_model} for chat")
+                return
+        except ImportError:
+            print("ollama not installed")
+        except Exception as e:
+            print(f"Ollama init error: {e}")
         
-        print("Warning: No LLM available. Install ollama or set API keys.")
+        print("⚠ Warning: No LLM available. Set API keys or install Ollama.")
         self.llm_client = None
         self.llm_provider = None
         self.llm_model = None
@@ -140,62 +137,14 @@ Please provide a helpful, accurate answer based on the context above. If the con
         message: str,
         document_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        Process a chat message and generate multimodal response.
-        
-        Implementation steps:
-        1. Load conversation history (for multi-turn support)
-        2. Search vector store for relevant context
-        3. Find related images and tables
-        4. Build prompt with context and history
-        5. Generate response using LLM
-        6. Format response with sources (text, images, tables)
-        
-        Args:
-            conversation_id: Conversation ID
-            message: User message
-            document_id: Optional document ID to scope search
-            
-        Returns:
-            {
-                "answer": "...",
-                "sources": [
-                    {
-                        "type": "text",
-                        "content": "...",
-                        "page": 3,
-                        "score": 0.95
-                    },
-                    {
-                        "type": "image",
-                        "url": "/uploads/images/xxx.png",
-                        "caption": "Figure 1: ...",
-                        "page": 3
-                    },
-                    {
-                        "type": "table",
-                        "url": "/uploads/tables/yyy.png",
-                        "caption": "Table 1: ...",
-                        "page": 5,
-                        "data": {...}  # structured table data
-                    }
-                ],
-                "processing_time": 2.5
-            }
-        """
+        """Process a chat message and generate multimodal response."""
         start_time = time.time()
         
         try:
-            # Step 1: Load conversation history
             history = await self._load_conversation_history(conversation_id)
-            
-            # Step 2: Search for relevant context
             context_chunks = await self._search_context(message, document_id)
+            related_media = await self._find_related_media(context_chunks, document_id)
             
-            # Step 3: Find related images and tables
-            related_media = await self._find_related_media(context_chunks)
-            
-            # Step 4: Build prompt
             prompt = self._build_prompt(
                 question=message,
                 context_chunks=context_chunks,
@@ -203,67 +152,44 @@ Please provide a helpful, accurate answer based on the context above. If the con
                 history=history
             )
             
-            # Step 5: Generate response using LLM
             answer = await self._generate_response(prompt)
             
-            # Step 6: Save message to conversation
-            await self._save_message(conversation_id, message, answer, context_chunks, related_media)
-            
-            # Step 7: Format response with sources
             processing_time = time.time() - start_time
-            
             sources = self._format_sources(context_chunks, related_media)
             
             return {
                 "answer": answer,
                 "sources": sources,
-                "processing_time": processing_time
+                "processing_time": round(processing_time, 2)
             }
             
         except Exception as e:
             processing_time = time.time() - start_time
+            print(f"Error processing message: {e}")
+            import traceback
+            traceback.print_exc()
             return {
-                "answer": f"I apologize, but I encountered an error processing your question: {str(e)}",
+                "answer": f"I encountered an error processing your question: {str(e)}",
                 "sources": [],
-                "processing_time": processing_time,
-                "error": str(e)
+                "processing_time": round(processing_time, 2)
             }
     
     async def _load_conversation_history(
         self,
         conversation_id: int,
-        limit: int = 5
+        max_messages: int = 10
     ) -> List[Dict[str, str]]:
-        """
-        Load recent conversation history.
-        
-        TODO: Implement conversation history loading
-        - Load last N messages from conversation
-        - Format for LLM context
-        - Include both user and assistant messages
-        
-        Returns:
-            [
-                {"role": "user", "content": "..."},
-                {"role": "assistant", "content": "..."},
-                ...
-            ]
-        """
-        messages = self.db.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at.desc()).limit(limit * 2).all()
-        
-        # Reverse to get chronological order
-        messages = list(reversed(messages))
-        
-        history = []
-        for msg in messages:
-            history.append({
-                "role": msg.role,
-                "content": msg.content
-            })
-        
-        return history
+        """Load recent conversation history."""
+        try:
+            messages = self.db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.created_at.desc()).limit(max_messages).all()
+            
+            messages = list(reversed(messages))
+            return [{"role": msg.role, "content": msg.content} for msg in messages]
+        except Exception as e:
+            print(f"Error loading history: {e}")
+            return []
     
     async def _search_context(
         self,
@@ -271,62 +197,79 @@ Please provide a helpful, accurate answer based on the context above. If the con
         document_id: Optional[int] = None,
         k: int = 5
     ) -> List[Dict[str, Any]]:
-        """
-        Search for relevant context using vector store.
-        
-        TODO: Implement context search
-        - Use vector store similarity search
-        - Filter by document if specified
-        - Return relevant chunks with metadata
-        """
-        return await self.vector_store.similarity_search(
-            query=query,
-            document_id=document_id,
-            k=k
-        )
+        """Search vector store for relevant text chunks."""
+        try:
+            return await self.vector_store.search_similar(
+                query=query,
+                document_id=document_id,
+                k=k
+            )
+        except Exception as e:
+            print(f"Error searching context: {e}")
+            return []
     
     async def _find_related_media(
         self,
-        context_chunks: List[Dict[str, Any]]
+        context_chunks: List[Dict[str, Any]],
+        document_id: Optional[int] = None
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Find related images and tables from context chunks.
+        """Find images and tables related to the context chunks."""
+        images = []
+        tables = []
         
-        TODO: Implement related media finding
-        - Extract image/table references from chunk metadata
-        - Query database for actual image/table records
-        - Return with URLs for frontend display
-        """
-        if not context_chunks:
-            return {"images": [], "tables": []}
-        
-        # Collect all related images and tables from chunks
-        all_images = []
-        all_tables = []
-        seen_image_ids = set()
-        seen_table_ids = set()
-        
-        for chunk in context_chunks:
-            # Get related images
-            for img in chunk.get("related_images", []):
-                img_id = img.get("id") if isinstance(img, dict) else img
-                if img_id not in seen_image_ids:
-                    seen_image_ids.add(img_id)
-                    if isinstance(img, dict):
-                        all_images.append(img)
+        try:
+            page_numbers = set()
+            for chunk in context_chunks:
+                if chunk.get("page_number"):
+                    page_numbers.add(chunk["page_number"])
             
-            # Get related tables
-            for tbl in chunk.get("related_tables", []):
-                tbl_id = tbl.get("id") if isinstance(tbl, dict) else tbl
-                if tbl_id not in seen_table_ids:
-                    seen_table_ids.add(tbl_id)
-                    if isinstance(tbl, dict):
-                        all_tables.append(tbl)
+            if not page_numbers and document_id:
+                page_numbers = {1, 2, 3}
+            
+            if page_numbers:
+                image_query = self.db.query(DocumentImage)
+                if document_id:
+                    image_query = image_query.filter(DocumentImage.document_id == document_id)
+                image_query = image_query.filter(DocumentImage.page_number.in_(page_numbers))
+                
+                for img in image_query.limit(5).all():
+                    images.append({
+                        "id": img.id,
+                        "file_path": img.file_path,
+                        "page_number": img.page_number,
+                        "caption": img.caption or "",
+                        "width": img.width,
+                        "height": img.height
+                    })
+            
+            if page_numbers:
+                table_query = self.db.query(DocumentTable)
+                if document_id:
+                    table_query = table_query.filter(DocumentTable.document_id == document_id)
+                table_query = table_query.filter(DocumentTable.page_number.in_(page_numbers))
+                
+                for tbl in table_query.limit(5).all():
+                    table_data = tbl.data
+                    if isinstance(table_data, str):
+                        try:
+                            table_data = json.loads(table_data)
+                        except:
+                            table_data = {}
+                    
+                    tables.append({
+                        "id": tbl.id,
+                        "image_path": tbl.image_path,
+                        "page_number": tbl.page_number,
+                        "caption": tbl.caption or "",
+                        "data": table_data,
+                        "rows": tbl.rows,
+                        "columns": tbl.columns
+                    })
+                    
+        except Exception as e:
+            print(f"Error finding related media: {e}")
         
-        return {
-            "images": all_images,
-            "tables": all_tables
-        }
+        return {"images": images, "tables": tables}
     
     def _build_prompt(
         self,
@@ -335,47 +278,40 @@ Please provide a helpful, accurate answer based on the context above. If the con
         related_media: Dict[str, List[Dict[str, Any]]],
         history: List[Dict[str, str]]
     ) -> str:
-        """
-        Build the RAG prompt with context, media, and history.
-        """
+        """Build the RAG prompt with context, media, and history."""
         # Format context
         context_parts = []
         for i, chunk in enumerate(context_chunks, 1):
-            context_parts.append(
-                f"[Chunk {i}] (Page {chunk.get('page_number', 'N/A')}, Relevance: {chunk.get('score', 0):.2f})\n"
-                f"{chunk.get('content', '')}"
-            )
+            score = chunk.get('score', 0)
+            page = chunk.get('page_number', 'N/A')
+            content = chunk.get('content', '')
+            context_parts.append(f"[Chunk {i}] (Page {page}, Score: {score:.2f})\n{content}")
         context_text = "\n\n".join(context_parts) if context_parts else "No relevant context found."
         
         # Format images
         images_parts = []
         for img in related_media.get("images", []):
-            images_parts.append(
-                f"- [Image] Page {img.get('page_number', 'N/A')}: {img.get('caption', 'No caption')}"
-            )
+            images_parts.append(f"- [Image on Page {img.get('page_number', 'N/A')}]: {img.get('caption', 'No caption')}")
         images_text = "\n".join(images_parts) if images_parts else "No related images."
         
         # Format tables
         tables_parts = []
         for tbl in related_media.get("tables", []):
-            table_info = f"- [Table] Page {tbl.get('page_number', 'N/A')}: {tbl.get('caption', 'No caption')}"
-            if tbl.get("data"):
-                data = tbl["data"]
-                if isinstance(data, dict) and "headers" in data:
-                    table_info += f"\n  Headers: {', '.join(str(h) for h in data.get('headers', []))}"
-                    if data.get("rows"):
-                        table_info += f"\n  Sample rows: {data['rows'][:3]}"
+            table_info = f"- [Table on Page {tbl.get('page_number', 'N/A')}]: {tbl.get('caption', 'No caption')}"
+            data = tbl.get("data", {})
+            if isinstance(data, dict) and "headers" in data:
+                table_info += f"\n  Columns: {', '.join(str(h) for h in data.get('headers', []))}"
             tables_parts.append(table_info)
         tables_text = "\n".join(tables_parts) if tables_parts else "No related tables."
         
         # Format history
         history_parts = []
-        for msg in history[-6:]:  # Last 3 exchanges
+        for msg in history[-10:]:
             role = "User" if msg["role"] == "user" else "Assistant"
-            history_parts.append(f"{role}: {msg['content'][:200]}...")
+            content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
+            history_parts.append(f"{role}: {content}")
         history_text = "\n".join(history_parts) if history_parts else "No previous conversation."
         
-        # Build final prompt
         return self.rag_prompt_template.format(
             context=context_text,
             images=images_text,
@@ -385,28 +321,19 @@ Please provide a helpful, accurate answer based on the context above. If the con
         )
     
     async def _generate_response(self, prompt: str) -> str:
-        """
-        Generate response using LLM.
-        
-        Supports multiple LLM backends.
-        """
+        """Generate response using the configured LLM."""
         if self.llm_client is None:
-            return "I apologize, but no LLM is currently configured. Please set up OpenAI, Groq, Gemini, or Ollama."
+            return (
+                "I apologize, but no LLM is currently configured. "
+                "Please set up one of the following:\n"
+                "- Groq: Set GROQ_API_KEY in .env (free at console.groq.com)\n"
+                "- Gemini: Set GOOGLE_API_KEY in .env\n"
+                "- OpenAI: Set OPENAI_API_KEY in .env\n"
+                "- Ollama: Install and run locally"
+            )
         
         try:
-            if self.llm_provider == "openai":
-                response = self.llm_client.chat.completions.create(
-                    model=self.llm_model,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=1000
-                )
-                return response.choices[0].message.content
-            
-            elif self.llm_provider == "groq":
+            if self.llm_provider == "groq":
                 response = self.llm_client.chat.completions.create(
                     model=self.llm_model,
                     messages=[
@@ -423,6 +350,18 @@ Please provide a helpful, accurate answer based on the context above. If the con
                 response = self.llm_client.generate_content(full_prompt)
                 return response.text
             
+            elif self.llm_provider == "openai":
+                response = self.llm_client.chat.completions.create(
+                    model=self.llm_model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                return response.choices[0].message.content
+            
             elif self.llm_provider == "ollama":
                 response = self.llm_client.chat(
                     model=self.llm_model,
@@ -433,71 +372,33 @@ Please provide a helpful, accurate answer based on the context above. If the con
                 )
                 return response['message']['content']
             
-            return "Unable to generate response."
+            return "Unable to generate response - unknown LLM provider."
             
         except Exception as e:
             print(f"LLM error: {e}")
+            import traceback
+            traceback.print_exc()
             return f"I encountered an error generating a response: {str(e)}"
-    
-    async def _save_message(
-        self,
-        conversation_id: int,
-        user_message: str,
-        assistant_response: str,
-        context_chunks: List[Dict[str, Any]],
-        related_media: Dict[str, List[Dict[str, Any]]]
-    ):
-        """Save user message and assistant response to conversation."""
-        try:
-            # Save user message
-            user_msg = Message(
-                conversation_id=conversation_id,
-                role="user",
-                content=user_message,
-                metadata=json.dumps({})
-            )
-            self.db.add(user_msg)
-            
-            # Save assistant message with sources
-            assistant_msg = Message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=assistant_response,
-                metadata=json.dumps({
-                    "sources": [
-                        {"chunk_id": c.get("id"), "score": c.get("score")}
-                        for c in context_chunks
-                    ],
-                    "images": [img.get("id") for img in related_media.get("images", [])],
-                    "tables": [tbl.get("id") for tbl in related_media.get("tables", [])]
-                })
-            )
-            self.db.add(assistant_msg)
-            
-            self.db.commit()
-            
-        except Exception as e:
-            print(f"Error saving messages: {e}")
-            self.db.rollback()
     
     def _format_sources(
         self,
         context_chunks: List[Dict[str, Any]],
         related_media: Dict[str, List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
-        """Format sources for API response."""
+        """Format sources for the API response."""
         sources = []
         
-        # Add text chunks as sources
         for chunk in context_chunks:
+            content = chunk.get("content", "")
+            if len(content) > 500:
+                content = content[:500] + "..."
             sources.append({
                 "type": "text",
-                "content": chunk.get("content", "")[:500] + "..." if len(chunk.get("content", "")) > 500 else chunk.get("content", ""),
+                "content": content,
                 "page": chunk.get("page_number"),
-                "score": chunk.get("score", 0)
+                "score": round(chunk.get("score", 0), 3)
             })
         
-        # Add images as sources
         for img in related_media.get("images", []):
             sources.append({
                 "type": "image",
@@ -506,7 +407,6 @@ Please provide a helpful, accurate answer based on the context above. If the con
                 "page": img.get("page_number")
             })
         
-        # Add tables as sources
         for tbl in related_media.get("tables", []):
             sources.append({
                 "type": "table",
@@ -517,34 +417,3 @@ Please provide a helpful, accurate answer based on the context above. If the con
             })
         
         return sources
-    
-    async def create_conversation(self, document_id: Optional[int] = None) -> Conversation:
-        """Create a new conversation."""
-        conversation = Conversation(
-            document_id=document_id,
-            metadata=json.dumps({})
-        )
-        self.db.add(conversation)
-        self.db.commit()
-        self.db.refresh(conversation)
-        return conversation
-    
-    async def get_conversation_history(
-        self,
-        conversation_id: int
-    ) -> List[Dict[str, Any]]:
-        """Get full conversation history with sources."""
-        messages = self.db.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at.asc()).all()
-        
-        return [
-            {
-                "id": msg.id,
-                "role": msg.role,
-                "content": msg.content,
-                "metadata": json.loads(msg.metadata) if msg.metadata else {},
-                "created_at": msg.created_at.isoformat() if msg.created_at else None
-            }
-            for msg in messages
-        ]

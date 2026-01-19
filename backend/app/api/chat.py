@@ -33,7 +33,7 @@ async def send_message(
 ) -> ChatResponse:
     """
     Send a chat message and get a response
-    
+
     This endpoint:
     1. Creates or retrieves conversation
     2. Saves user message
@@ -56,7 +56,7 @@ async def send_message(
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
-    
+
     # Save user message
     user_message = Message(
         conversation_id=conversation.id,
@@ -65,22 +65,15 @@ async def send_message(
     )
     db.add(user_message)
     db.commit()
-    
-    # TODO: Process message with ChatEngine
-    # chat_engine = ChatEngine(db)
-    # result = await chat_engine.process_message(
-    #     conversation_id=conversation.id,
-    #     message=request.message,
-    #     document_id=request.document_id
-    # )
-    
-    # For now, return placeholder response
-    result = {
-        "answer": "This is a placeholder response. Implement ChatEngine to process messages.",
-        "sources": [],
-        "processing_time": 0.0
-    }
-    
+
+    # Process message with ChatEngine
+    chat_engine = ChatEngine(db)
+    result = await chat_engine.process_message(
+        conversation_id=conversation.id,
+        message=request.message,
+        document_id=request.document_id
+    )
+
     # Save assistant message
     assistant_message = Message(
         conversation_id=conversation.id,
@@ -91,7 +84,7 @@ async def send_message(
     db.add(assistant_message)
     db.commit()
     db.refresh(assistant_message)
-    
+
     return ChatResponse(
         conversation_id=conversation.id,
         message_id=assistant_message.id,
@@ -113,7 +106,7 @@ async def list_conversations(
     conversations = db.query(Conversation).order_by(
         Conversation.updated_at.desc()
     ).offset(skip).limit(limit).all()
-    
+
     return {
         "conversations": [
             {
@@ -141,10 +134,10 @@ async def get_conversation(
     conversation = db.query(Conversation).filter(
         Conversation.id == conversation_id
     ).first()
-    
+
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     return {
         "id": conversation.id,
         "title": conversation.title,
@@ -174,11 +167,11 @@ async def delete_conversation(
     conversation = db.query(Conversation).filter(
         Conversation.id == conversation_id
     ).first()
-    
+
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     db.delete(conversation)
     db.commit()
-    
+
     return {"message": "Conversation deleted successfully"}
